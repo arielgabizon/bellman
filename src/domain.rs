@@ -260,13 +260,13 @@ impl<E: Engine> Group<E> for Scalar<E> {
 
 fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
 {
-    let log_cpus = worker.log_num_cpus();
+   // let log_cpus = worker.log_num_cpus();
 
-    if log_n <= log_cpus {
+    //if log_n <= log_cpus {
         serial_fft(a, omega, log_n);
-    } else {
-        parallel_fft(a, worker, omega, log_n, log_cpus);
-    }
+//    } else {
+//        parallel_fft(a, worker, omega, log_n, log_cpus);
+//    }
 }
 
 fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
