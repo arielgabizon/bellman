@@ -4,6 +4,7 @@ use paired::{Engine, PairingCurveAffine};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 use crate::SynthesisError;
+use paired::tests::field::random_field_tests;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let mut gamma = vk.gamma_g2;
@@ -57,6 +58,7 @@ pub fn verify_proof<'a, E: Engine>(
 
 // randomized batch verification - see Appendix B.2 in Zcash spec
 pub fn verify_proofs<'a, E: Engine>(
+    rng: &mut R
     pvk: &'a PreparedVerifyingKey<E>,
     proofs: &[Proof<E>],
     public_inputs: &[[E::Fr]],
@@ -66,9 +68,13 @@ pub fn verify_proofs<'a, E: Engine>(
             return Err(SynthesisError::MalformedVerifyingKey);
         }
     }
+    let mut acc = pvk.ic[0].into_projective();
+    for i in 0..proof_num {
+        r[i] = E::Fr::random(rng);
 
-    for proof in proofs {
-        let mut acc = pvk.ic[0].into_projective();
+    }
+    for (pub_input, proof) in public_inputs.iter().zip(proofs.iter())
+     {
 
         for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
             acc.add_assign(&b.mul(i.into_repr()));
@@ -93,4 +99,5 @@ pub fn verify_proofs<'a, E: Engine>(
             .unwrap()
             == pvk.alpha_g1_beta_g2)
     }
+    OK(false)
 }
