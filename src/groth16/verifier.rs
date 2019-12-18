@@ -53,3 +53,44 @@ pub fn verify_proof<'a, E: Engine>(
     .unwrap()
         == pvk.alpha_g1_beta_g2)
 }
+
+
+// randomized batch verification - see Appendix B.2 in Zcash spec
+pub fn verify_proofs<'a, E: Engine>(
+    pvk: &'a PreparedVerifyingKey<E>,
+    proofs: &[Proof<E>],
+    public_inputs: &[[E::Fr]],
+) -> Result<bool, SynthesisError> {
+    for (pub_input) in public_inputs {
+        if (pub_input.len() + 1) != pvk.ic.len() {
+            return Err(SynthesisError::MalformedVerifyingKey);
+        }
+    }
+
+    for proof in proofs {
+        let mut acc = pvk.ic[0].into_projective();
+
+        for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
+            acc.add_assign(&b.mul(i.into_repr()));
+        }
+
+        // The original verification equation is:
+        // A * B = alpha * beta + inputs * gamma + C * delta
+        // ... however, we rearrange it so that it is:
+        // A * B - inputs * gamma - C * delta = alpha * beta
+        // or equivalently:
+        // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
+        // which allows us to do a single final exponentiation.
+
+        Ok(E::final_exponentiation(&E::miller_loop(
+            [
+                (&proof.a.prepare(), &proof.b.prepare()),
+                (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
+                (&proof.c.prepare(), &pvk.neg_delta_g2),
+            ]
+                .iter(),
+        ))
+            .unwrap()
+            == pvk.alpha_g1_beta_g2)
+    }
+}
