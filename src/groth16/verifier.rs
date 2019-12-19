@@ -55,10 +55,9 @@ pub fn verify_proof<'a, E: Engine>(
         == pvk.alpha_g1_beta_g2)
 }
 
-
 // randomized batch verification - see Appendix B.2 in Zcash spec
 pub fn verify_proofs<'a, E: Engine>(
-    rng: &mut R
+    rng: &mut R,
     pvk: &'a PreparedVerifyingKey<E>,
     proofs: &[Proof<E>],
     public_inputs: &[[E::Fr]],
@@ -68,7 +67,6 @@ pub fn verify_proofs<'a, E: Engine>(
             return Err(SynthesisError::MalformedVerifyingKey);
         }
     }
-
 
     let PI_num = pub_input.len();
 
@@ -81,7 +79,7 @@ pub fn verify_proofs<'a, E: Engine>(
     // create corresponding scalars for public input vk elements
     let mut PI_scalars = vec![];
 
-    for i in 0..PI_num{
+    for i in 0..PI_num {
         PI_scalars.push(E::Fr::zero);
         for j in 0..proof_num {
             PI_scalars[i].add_assign(r[j].mul_assign(public_inputs[j][i]));
@@ -99,16 +97,14 @@ pub fn verify_proofs<'a, E: Engine>(
     acc_PI = acc_PI.into_affine().prepare();
 
     let mut sum_r = E::Fr::zero();
-    for i in r.iter(){
+    for i in r.iter() {
         sum_r.add_assign(i);
     }
     let acc_Y = (pvk.alpha_g1_beta_g2).pow(sum_r.negate());
 
-
-
     // This corresponds to Accum_Delta
     let mut acc_C = E::zero();
-    for (rand_coeff, proof) in r.iter().zip(proofs.iter()){
+    for (rand_coeff, proof) in r.iter().zip(proofs.iter()) {
         acc_C.add_assign(proof.c.mul_assign(rand_coeff))
     }
 
@@ -116,20 +112,13 @@ pub fn verify_proofs<'a, E: Engine>(
 
     let mut ML_G1 = vec![];
     let mut ML_G2 = vec![];
-    for (rand_coeff, proof) in r.iter().zip(proofs.iter()){
-        ML_G1.push(&proof.a.mul_assign(rand_coeff).prepare())
+    for (rand_coeff, proof) in r.iter().zip(proofs.iter()) {
+        ML_G1.push(&proof.a.mul_assign(rand_coeff).prepare());
         ML_G2.push(&proof.b.negate().prepare());
     }
     let acc_AB = E::miller_loop(ML_G1.iter().zip(ML_G2.iter()));
 
+    let mut res = acc_AB.mul_assign(E::miller_loop([(&acc_C, &pvk.neg_delta_g2)]));
 
-    let mut res = acc_AB.mul_assign(E::miller_loop([(&acc_C,&pvk.neg_delta_g2)]));
-
-
-
-
-
-        Ok(E::final_exponentiation(&res)
-            .unwrap()
-            == acc_Y)
-    }
+    Ok(E::final_exponentiation(&res).unwrap() == acc_Y)
+}
