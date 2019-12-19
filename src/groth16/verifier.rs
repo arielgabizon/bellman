@@ -4,7 +4,8 @@ use paired::{Engine, PairingCurveAffine};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 use crate::SynthesisError;
-use paired::tests::field::random_field_tests;
+// use paired::tests::field::random_field_tests;
+use rand_core::RngCore;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let mut gamma = vk.gamma_g2;
@@ -56,24 +57,29 @@ pub fn verify_proof<'a, E: Engine>(
 }
 
 // randomized batch verification - see Appendix B.2 in Zcash spec
-pub fn verify_proofs<'a, E: Engine>(
-    rng: &mut R,
+pub fn verify_proofs<'a, E: Engine, R: RngCore>(
     pvk: &'a PreparedVerifyingKey<E>,
+    rng: &mut R,
     proofs: &[Proof<E>],
-    public_inputs: &[[E::Fr]],
+    public_inputs: &[&[E::Fr]],
 ) -> Result<bool, SynthesisError> {
-    for (pub_input) in public_inputs {
+    for pub_input in public_inputs {
         if (pub_input.len() + 1) != pvk.ic.len() {
             return Err(SynthesisError::MalformedVerifyingKey);
         }
     }
 
-    let PI_num = pub_input.len();
+
+
+
+
+    let PI_num = pvk.ic.len()-1;
+    let proof_num = proofs.len();
 
     // choose random coefficients for combining the proofs
     let mut r = vec![];
     for _ in 0..proof_num {
-        r.push(E::Fr::random(rng));
+        r.push(E::Fr::random(&rng));
     }
 
     // create corresponding scalars for public input vk elements
