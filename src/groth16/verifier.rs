@@ -68,36 +68,68 @@ pub fn verify_proofs<'a, E: Engine>(
             return Err(SynthesisError::MalformedVerifyingKey);
         }
     }
-    let mut acc = pvk.ic[0].into_projective();
-    for i in 0..proof_num {
-        r[i] = E::Fr::random(rng);
 
+
+    let PI_num = pub_input.len();
+
+    // choose random coefficients for combining the proofs
+    let mut r = vec![];
+    for _ in 0..proof_num {
+        r.push(E::Fr::random(rng));
     }
-    for (pub_input, proof) in public_inputs.iter().zip(proofs.iter())
-     {
 
-        for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
-            acc.add_assign(&b.mul(i.into_repr()));
+    // create corresponding scalars for public input vk elements
+    let mut PI_scalars = vec![];
+
+    for i in 0..PI_num{
+        PI_scalars.push(E::Fr::zero);
+        for j in 0..proof_num {
+            PI_scalars[i].add_assign(r[j].mul_assign(public_inputs[j][i]));
         }
-
-        // The original verification equation is:
-        // A * B = alpha * beta + inputs * gamma + C * delta
-        // ... however, we rearrange it so that it is:
-        // A * B - inputs * gamma - C * delta = alpha * beta
-        // or equivalently:
-        // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
-        // which allows us to do a single final exponentiation.
-
-        Ok(E::final_exponentiation(&E::miller_loop(
-            [
-                (&proof.a.prepare(), &proof.b.prepare()),
-                (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
-                (&proof.c.prepare(), &pvk.neg_delta_g2),
-            ]
-                .iter(),
-        ))
-            .unwrap()
-            == pvk.alpha_g1_beta_g2)
     }
-    OK(false)
-}
+
+    // create group element corresponding to public input combination
+    // This roughly corresponds to Accum_Gamma in spec
+    let mut acc_PI = pvk.ic[0].into_projective();
+
+    for (i, b) in PI_scalars.iter().zip(pvk.ic.iter().skip(1)) {
+        acc_PI.add_assign(&b.mul(i.into_repr()));
+    }
+
+    acc_PI = acc_PI.into_affine().prepare();
+
+    let mut sum_r = E::Fr::zero();
+    for i in r.iter(){
+        sum_r.add_assign(i);
+    }
+    let acc_Y = (pvk.alpha_g1_beta_g2).pow(sum_r.negate());
+
+
+
+    // This corresponds to Accum_Delta
+    let mut acc_C = E::zero();
+    for (rand_coeff, proof) in r.iter().zip(proofs.iter()){
+        acc_C.add_assign(proof.c.mul_assign(rand_coeff))
+    }
+
+    acc_C = acc_C.prepare();
+
+    let mut ML_G1 = vec![];
+    let mut ML_G2 = vec![];
+    for (rand_coeff, proof) in r.iter().zip(proofs.iter()){
+        ML_G1.push(&proof.a.mul_assign(rand_coeff).prepare())
+        ML_G2.push(&proof.b.negate().prepare());
+    }
+    let acc_AB = E::miller_loop(ML_G1.iter().zip(ML_G2.iter()));
+
+
+    let mut res = acc_AB.mul_assign(E::miller_loop([(&acc_C,&pvk.neg_delta_g2)]));
+
+
+
+
+
+        Ok(E::final_exponentiation(&res)
+            .unwrap()
+            == acc_Y)
+    }
